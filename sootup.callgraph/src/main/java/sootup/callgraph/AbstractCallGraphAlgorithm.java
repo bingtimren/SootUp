@@ -26,6 +26,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import javax.annotation.Nonnull;
+import java.util.function.BiPredicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import sootup.core.IdentifierFactory;
@@ -57,10 +58,13 @@ public abstract class AbstractCallGraphAlgorithm implements CallGraphAlgorithm {
 
   private static final Logger logger = LoggerFactory.getLogger(AbstractCallGraphAlgorithm.class);
 
+  private BiPredicate<SootMethod, Stmt> boundFunction;
+
   @Nonnull protected final View view;
 
   protected AbstractCallGraphAlgorithm(@Nonnull View view) {
     this.view = view;
+    this.boundFunction = (method, statement) -> true;
   }
 
   /**
@@ -217,6 +221,7 @@ public abstract class AbstractCallGraphAlgorithm implements CallGraphAlgorithm {
 
     return sourceMethod.getBody().getStmts().stream()
         .filter(Stmt::containsInvokeExpr)
+        .filter(stmt -> boundFunction.test(sourceMethod, stmt))
         .flatMap(s -> resolveCall(sourceMethod, s.getInvokeExpr()));
   }
 
@@ -534,5 +539,24 @@ public abstract class AbstractCallGraphAlgorithm implements CallGraphAlgorithm {
             + sig.getDeclClassType().getClassName()
             + " and in its superclasses and interfaces");
     return Optional.empty();
+  }
+
+  /** @return the bound function, see @setBoundFunction */
+  public BiPredicate<SootMethod, Stmt> getBoundFunction()
+  {
+      return boundFunction;
+  }
+
+  /** Set a bound function to prune the call graph. The bound function accepts the source method and
+   * an InvokableStatement, which is in the source method's body, and determines if the call from
+   * the source method to the invocation target shall be added into the call graph.
+   * 
+   * This allows building an pruned & potentially incomplete call graph, with lower memory / CPU
+   * cost.
+   * 
+   * @param boundFunction */
+  public void setBoundFunction(BiPredicate<SootMethod, Stmt> boundFunction)
+  {
+      this.boundFunction = boundFunction == null ? (method, statement) -> true : boundFunction;
   }
 }
